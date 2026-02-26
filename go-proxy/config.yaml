@@ -21,6 +21,17 @@ routes:
       type_url_field: "type_url"
       metadata_field: "metadata"
 
+  # Secure Envelope with inspecting, verifying, and signing concurrently
+  - match: "/echo.SecureService/Unordered*"
+    mode: "inspect-verify-sign"
+    unordered: true
+    envelope:
+      payload_field: "payload"
+      type_url_field: "type_url"
+      client_sig_field: "client_signature"
+      proxy_sig_field: "proxy_signature"
+      metadata_field: "metadata"
+
   # Secure Envelope with inspecting, verifying, and signing
   - match: "/echo.SecureService/*"
     mode: "inspect-verify-sign"

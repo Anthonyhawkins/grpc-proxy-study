@@ -1,5 +1,5 @@
 
-ê
+’
 api/echo/echo.protoecho"'
 EchoRequest
 message (	Rmessage"(
@@ -16,9 +16,10 @@
 value (	Rvalue:82ä
 EchoService2
 	UnaryEcho.echo.EchoRequest.echo.EchoResponseG
-BidirectionalStreamingEcho.echo.EchoRequest.echo.EchoResponse(02«
+BidirectionalStreamingEcho.echo.EchoRequest.echo.EchoResponse(02å
 SecureService8
 
 SecureEcho.echo.SecureEnvelope.echo.SecureEnvelope@
-SecureBidiEcho.echo.SecureEnvelope.echo.SecureEnvelope(0:
+SecureBidiEcho.echo.SecureEnvelope.echo.SecureEnvelope(0C
+UnorderedBidiEcho.echo.SecureEnvelope.echo.SecureEnvelope(0:
 InspectOuter.echo.SecureEnvelope.echo.SecureEnvelopeB(Z&github.com/anthony/grpc-proxy/api/echobproto3

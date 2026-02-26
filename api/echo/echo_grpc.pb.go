@@ -154,9 +154,10 @@ var EchoService_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
-	SecureService_SecureEcho_FullMethodName     = "/echo.SecureService/SecureEcho"
-	SecureService_SecureBidiEcho_FullMethodName = "/echo.SecureService/SecureBidiEcho"
-	SecureService_InspectOuter_FullMethodName   = "/echo.SecureService/InspectOuter"
+	SecureService_SecureEcho_FullMethodName        = "/echo.SecureService/SecureEcho"
+	SecureService_SecureBidiEcho_FullMethodName    = "/echo.SecureService/SecureBidiEcho"
+	SecureService_UnorderedBidiEcho_FullMethodName = "/echo.SecureService/UnorderedBidiEcho"
+	SecureService_InspectOuter_FullMethodName      = "/echo.SecureService/InspectOuter"
 )
 
 // SecureServiceClient is the client API for SecureService service.
@@ -167,6 +168,7 @@ const (
 type SecureServiceClient interface {
 	SecureEcho(ctx context.Context, in *SecureEnvelope, opts ...grpc.CallOption) (*SecureEnvelope, error)
 	SecureBidiEcho(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[SecureEnvelope, SecureEnvelope], error)
+	UnorderedBidiEcho(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[SecureEnvelope, SecureEnvelope], error)
 	InspectOuter(ctx context.Context, in *SecureEnvelope, opts ...grpc.CallOption) (*SecureEnvelope, error)
 }
 
@@ -201,6 +203,19 @@ func (c *secureServiceClient) SecureBidiEcho(ctx context.Context, opts ...grpc.C
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type SecureService_SecureBidiEchoClient = grpc.BidiStreamingClient[SecureEnvelope, SecureEnvelope]
 
+func (c *secureServiceClient) UnorderedBidiEcho(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[SecureEnvelope, SecureEnvelope], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &SecureService_ServiceDesc.Streams[1], SecureService_UnorderedBidiEcho_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[SecureEnvelope, SecureEnvelope]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type SecureService_UnorderedBidiEchoClient = grpc.BidiStreamingClient[SecureEnvelope, SecureEnvelope]
+
 func (c *secureServiceClient) InspectOuter(ctx context.Context, in *SecureEnvelope, opts ...grpc.CallOption) (*SecureEnvelope, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(SecureEnvelope)
@@ -219,6 +234,7 @@ func (c *secureServiceClient) InspectOuter(ctx context.Context, in *SecureEnvelo
 type SecureServiceServer interface {
 	SecureEcho(context.Context, *SecureEnvelope) (*SecureEnvelope, error)
 	SecureBidiEcho(grpc.BidiStreamingServer[SecureEnvelope, SecureEnvelope]) error
+	UnorderedBidiEcho(grpc.BidiStreamingServer[SecureEnvelope, SecureEnvelope]) error
 	InspectOuter(context.Context, *SecureEnvelope) (*SecureEnvelope, error)
 	mustEmbedUnimplementedSecureServiceServer()
 }
@@ -235,6 +251,9 @@ func (UnimplementedSecureServiceServer) SecureEcho(context.Context, *SecureEnvel
 }
 func (UnimplementedSecureServiceServer) SecureBidiEcho(grpc.BidiStreamingServer[SecureEnvelope, SecureEnvelope]) error {
 	return status.Errorf(codes.Unimplemented, "method SecureBidiEcho not implemented")
+}
+func (UnimplementedSecureServiceServer) UnorderedBidiEcho(grpc.BidiStreamingServer[SecureEnvelope, SecureEnvelope]) error {
+	return status.Errorf(codes.Unimplemented, "method UnorderedBidiEcho not implemented")
 }
 func (UnimplementedSecureServiceServer) InspectOuter(context.Context, *SecureEnvelope) (*SecureEnvelope, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method InspectOuter not implemented")
@@ -285,6 +304,13 @@ func _SecureService_SecureBidiEcho_Handler(srv interface{}, stream grpc.ServerSt
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type SecureService_SecureBidiEchoServer = grpc.BidiStreamingServer[SecureEnvelope, SecureEnvelope]
 
+func _SecureService_UnorderedBidiEcho_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(SecureServiceServer).UnorderedBidiEcho(&grpc.GenericServerStream[SecureEnvelope, SecureEnvelope]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type SecureService_UnorderedBidiEchoServer = grpc.BidiStreamingServer[SecureEnvelope, SecureEnvelope]
+
 func _SecureService_InspectOuter_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SecureEnvelope)
 	if err := dec(in); err != nil {
@@ -323,6 +349,12 @@ var SecureService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "SecureBidiEcho",
 			Handler:       _SecureService_SecureBidiEcho_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "UnorderedBidiEcho",
+			Handler:       _SecureService_UnorderedBidiEcho_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
 		},

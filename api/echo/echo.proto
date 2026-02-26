@@ -29,5 +29,6 @@ message SecureEnvelope {
 service SecureService {
   rpc SecureEcho(SecureEnvelope) returns (SecureEnvelope);
   rpc SecureBidiEcho(stream SecureEnvelope) returns (stream SecureEnvelope);
+  rpc UnorderedBidiEcho(stream SecureEnvelope) returns (stream SecureEnvelope);
   rpc InspectOuter(SecureEnvelope) returns (SecureEnvelope);
 }

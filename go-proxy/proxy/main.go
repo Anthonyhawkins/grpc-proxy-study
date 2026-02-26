@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/jhump/protoreflect/desc"
 	"github.com/jhump/protoreflect/dynamic"
@@ -55,9 +56,10 @@ type SchemaConfig struct {
 }
 
 type RouteConfig struct {
-	Match    string         `yaml:"match"`
-	Mode     string         `yaml:"mode"` // pass-thru, inspect-outer, inspect-verify-sign
-	Envelope EnvelopeConfig `yaml:"envelope"`
+	Match     string         `yaml:"match"`
+	Mode      string         `yaml:"mode"` // pass-thru, inspect-outer, inspect-verify-sign
+	Unordered bool           `yaml:"unordered"`
+	Envelope  EnvelopeConfig `yaml:"envelope"`
 }
 
 type EnvelopeConfig struct {
@@ -246,41 +248,74 @@ func transparentHandler(srv interface{}, serverStream grpc.ServerStream) error {
 		return err
 	}
 
-	s2cErrChan := make(chan error, 1)
-	go func() {
-		for {
-			var payload []byte
-			if err := clientStream.RecvMsg(&payload); err != nil {
-				s2cErrChan <- err
-				break
+	pump := func(src grpc.Stream, dst grpc.Stream, errChan chan error, isReq bool) {
+		if !route.Unordered {
+			// Synchronous/Ordered Processing
+			for {
+				var payload []byte
+				if err := src.RecvMsg(&payload); err != nil {
+					errChan <- err
+					break
+				}
+				if route.Mode != "pass-thru" {
+					payload = processMsg(fullMethodName, isReq, payload, route)
+				}
+				if err := dst.SendMsg(&payload); err != nil {
+					errChan <- err
+					break
+				}
 			}
-			if route.Mode != "pass-thru" {
-				payload = processMsg(fullMethodName, false, payload, route)
-			}
-			if err := serverStream.SendMsg(&payload); err != nil {
-				s2cErrChan <- err
-				break
+		} else {
+			// Asynchronous/Unordered Processing
+			outChan := make(chan []byte, 100)
+			workerErrChan := make(chan error, 1)
+			var wg sync.WaitGroup
+
+			// Dedicated Sender Goroutine
+			go func() {
+				for p := range outChan {
+					if err := dst.SendMsg(&p); err != nil {
+						workerErrChan <- err
+						return
+					}
+				}
+			}()
+
+			for {
+				var payload []byte
+				if err := src.RecvMsg(&payload); err != nil {
+					wg.Wait()
+					close(outChan)
+					errChan <- err
+					break
+				}
+
+				select {
+				case err := <-workerErrChan:
+					errChan <- err
+					return
+				default:
+				}
+
+				if route.Mode != "pass-thru" {
+					wg.Add(1)
+					go func(p []byte) {
+						defer wg.Done()
+						res := processMsg(fullMethodName, isReq, p, route)
+						outChan <- res
+					}(payload)
+				} else {
+					outChan <- payload
+				}
 			}
 		}
-	}()
+	}
+
+	s2cErrChan := make(chan error, 1)
+	go pump(clientStream, serverStream, s2cErrChan, false)
 
 	c2sErrChan := make(chan error, 1)
-	go func() {
-		for {
-			var payload []byte
-			if err := serverStream.RecvMsg(&payload); err != nil {
-				c2sErrChan <- err
-				break
-			}
-			if route.Mode != "pass-thru" {
-				payload = processMsg(fullMethodName, true, payload, route)
-			}
-			if err := clientStream.SendMsg(&payload); err != nil {
-				c2sErrChan <- err
-				break
-			}
-		}
-	}()
+	go pump(serverStream, clientStream, c2sErrChan, true)
 
 	select {
 	case err := <-s2cErrChan:

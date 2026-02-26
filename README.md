@@ -110,17 +110,19 @@ By keeping the proxy's core networking, HTTP/2 streams, and dynamic routing in G
 
 ### Benchmark Results (10,000 Concurrent Requests)
 
-The proxy includes an integrated synthetic benchmark tool (`make bench-all`) to measure the performance overhead of both dynamic protobuf parsing and CGO cryptographic offloading.
+The proxy includes an integrated synthetic benchmark tool (`make bench-all`) to measure the performance overhead of both dynamic protobuf parsing and CGO cryptographic offloading. It also tests the difference between strict Ordered streaming and concurrent Unordered streaming.
 
-| Mode | Engine | Total Time | Average Latency | Overhead vs Baseline |
-| :--- | :--- | :--- | :--- | :--- |
-| **Pass-Thru** | No Decoding | 3.31 sec | **~331 µs / req** | *Baseline* |
-| **Inspect Outer** | Go `dynamicpb` (No Crypto) | 3.53 sec | **~353 µs / req** | **+22 µs / req** |
-| **Secure Envelope** | **Pure Go Crypto** | 21.50 sec | **~2.15 ms / req** | **+1.82 ms / req** |
-| **Secure Envelope** | **Rust CGO FFI Crypto** | 19.67 sec | **~1.96 ms / req** | **+1.63 ms / req** |
+| Mode | Engine | Processing | Total Time | Average Latency | Overhead vs Baseline |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Pass-Thru** | No Decoding | Ordered | 3.31 sec | **~331 µs / req** | *Baseline* |
+| **Inspect Outer** | Go `dynamicpb` (No Crypto) | Ordered | 3.53 sec | **~353 µs / req** | **+22 µs / req** |
+| **Secure Envelope** | **Pure Go Crypto** | Ordered | 21.50 sec | **~2.15 ms / req** | **+1.82 ms / req** |
+| **Secure Envelope** | **Rust CGO FFI Crypto** | Ordered | 19.67 sec | **~1.96 ms / req** | **+1.63 ms / req** |
+| **Secure Envelope** | **Rust CGO FFI Crypto** | **Unordered (Concurrent)** | 7.52 sec | **~752 µs / req** | **+421 µs / req** |
 
 ### Benchmark Takeaways
 
 1. **Dynamic Protobuf Parsing is Fast:** The overhead of catching a raw bitstream, converting it to a dynamic message (`dynamicpb`), mapping Envelope fields via YAML, inspecting the inner payload, and serializing it back to bytes adds only **~22 microseconds** of latency per request. 
 2. **Rust is ~10% Faster at Crypto than Go:** Offloading the two RSA-2048 operations (verify and sign) to the compiled Rust library shaved ~200 microseconds off each request compared to Go's standard `crypto/rsa` library, representing nearly a 10% total latency reduction across the entire execution flow.
 3. **CGO Overhead is Minimal:** The cost of passing C-pointers (`*const u8`) back and forth across the Go/Rust C ABI boundary is insignificant compared to the heavy mathematical work being performed.
+4. **Unordered Concurrency Yields Massive Throughput:** By configuring a route as `unordered: true` matching a stream where strict message ordering is not required, the proxy fans out the heavy cryptographic processing to a worker pool (syncing back to the stream via a channel). Doing this **nearly tripled throughput** (from 19.6s down to 7.5s for 10k messages) and slashed average effective latency per request directly.

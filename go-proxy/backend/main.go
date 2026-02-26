@@ -77,6 +77,26 @@ func (s *server) SecureBidiEcho(stream echo.SecureService_SecureBidiEchoServer) 
 	}
 }
 
+func (s *server) UnorderedBidiEcho(stream echo.SecureService_UnorderedBidiEchoServer) error {
+	log.Printf("Backend Unordered Bidi stream opened")
+	for {
+		req, err := stream.Recv()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if err := stream.Send(&echo.SecureEnvelope{
+			Payload:        []byte("Backend Streaming Processed: " + string(req.GetPayload())),
+			TypeUrl:        req.GetTypeUrl(),
+			ProxySignature: req.GetProxySignature(),
+		}); err != nil {
+			return err
+		}
+	}
+}
+
 func main() {
 	lis, err := net.Listen("tcp", ":9090")
 	if err != nil {

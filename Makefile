@@ -73,5 +73,11 @@ bench-all: clean build-rust
 	@echo "\n=== BENCHMARK 4: Secure Envelope (Rust FFI Crypto) ==="
 	go run benchmark/main.go -mode=secure -count=10000
 	
+	@echo "\nWaiting 5 seconds for system to settle..."
+	@sleep 5
+
+	@echo "\n=== BENCHMARK 5: Secure Envelope Unordered (Rust FFI Crypto Concurrency) ==="
+	go run benchmark/main.go -mode=secure-unordered -count=10000
+	
 	@echo "\n--- Benchmarks Complete ---"
 	@make clean
