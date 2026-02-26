@@ -12,8 +12,8 @@ BACKEND_PID=$!
 
 sleep 2
 
-echo "--- Testing with PB Descriptor Method ---"
-go run proxy/main.go -method=pb -pb=api/echo/echo.pb &
+echo "--- Testing Proxy with Config.yaml ---"
+go run proxy/main.go -config=config.yaml &
 PROXY_PID=$!
 
 sleep 2

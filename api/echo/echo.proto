@@ -15,3 +15,19 @@ service EchoService {
   rpc UnaryEcho(EchoRequest) returns (EchoResponse);
   rpc BidirectionalStreamingEcho(stream EchoRequest) returns (stream EchoResponse);
 }
+
+// SecureEnvelope is the dynamic Outer Message
+message SecureEnvelope {
+  map<string, string> metadata = 1;
+  string type_url = 2;
+  bytes payload = 3;
+  bytes client_signature = 4;
+  bytes proxy_signature = 5;
+}
+
+// SecureService uses the SecureEnvelope
+service SecureService {
+  rpc SecureEcho(SecureEnvelope) returns (SecureEnvelope);
+  rpc SecureBidiEcho(stream SecureEnvelope) returns (stream SecureEnvelope);
+  rpc InspectOuter(SecureEnvelope) returns (SecureEnvelope);
+}

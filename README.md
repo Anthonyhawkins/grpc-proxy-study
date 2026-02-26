@@ -2,81 +2,125 @@
 
 ## Abstract
 
-This document outlines a formal proof of concept (POC) for a dynamic, message-aware gRPC reverse proxy. The primary goal of this study is to demonstrate the feasibility of building a proxy in Go that can terminate gRPC streams, forward traffic between clients and backends, and deeply inspect message payloads—all without requiring recompilation when new RPC methods or Protocol Buffer (protobuf) message types are introduced. 
+This document outlines a formal proof of concept (POC) for a dynamic, message-aware gRPC reverse proxy. The primary goal of this study is to demonstrate the feasibility of building a proxy in Go that can terminate gRPC streams, forward traffic between clients and backends, deeply inspect message payloads, and dynamically enforce Envelope-based Cryptographic Message Syntax (CMS) verification—all without requiring recompilation when new RPC methods or Protocol Buffer (protobuf) message types are introduced. 
 
 ## Background
 
 Traditional gRPC systems rely heavily on statically compiled stubs generated from `.proto` definitions. While this provides strong type safety and high performance, it creates a tight coupling in infrastructure components like proxies. If a reverse proxy needs to inspect or log the contents of a gRPC message for routing, security, or observability, the standard approach requires importing the compiled Go structs into the proxy and rebuilding it every time the API changes. 
 
-This POC proves that a dynamic approach is possible, leveraging the `google.golang.org/protobuf/types/dynamicpb` and `github.com/jhump/protoreflect` packages to dynamically reconstruct message schemas at runtime and read raw byte streams transparently.
+Furthermore, to fulfill enterprise security requirements, clients often must sign their payloads using a private key (CMS Signature) that the proxy verifies before forwarding the payload to backend, often injecting its own signature to establish a chain of custody. 
+
+This POC proves that a highly dynamic, zero-recompilation approach is possible, leveraging the `google.golang.org/protobuf/types/dynamicpb` and `github.com/jhump/protoreflect` packages to dynamically reconstruct message schemas, enforce dynamic "Outer Message" envelope schemas configured via YAML, verify signatures, and inject new fields.
 
 ## Requirements
 
-The proxy must satisfy the following constraints:
-1. **Language:** Written in Go.
-2. **Universal Compatibility:** Function with any arbitrary gRPC RPC method (Unary, Client Streaming, Server Streaming, or Bidirectional Streaming).
-3. **Agnostic Payload Handling:** Function with any arbitrary protobuf message type.
-4. **Deep Inspection:** Capable of unmarshaling and inspecting the fields and values of the message payload.
-5. **Runtime Flexibility:** Support new RPCs and message definitions without a proxy code change.
+The proxy satisfies the following constraints:
+1. **Universal Compatibility:** Function directly with any arbitrary gRPC RPC method (Unary, Client Streaming, Server Streaming, or Bidirectional Streaming).
+2. **Agnostic Payload Handling:** Intercept and parse any arbitrary protobuf message type.
+3. **Deep Inspection:** Unmarshal and inspect the fields and values of the message payload dynamically.
+4. **Dynamic Envelopes:** Accept a flexible "Outer Message" Envelope schema configured by the operator via YAML rather than hardcoded in Go, protecting the integrity of the inner immutable payload bytes.
+5. **Runtime Flexibility:** Support new RPCs and message definitions dynamically via `FileDescriptorSets` or `gRPC Server Reflection` without proxy restarts or binary alterations.
 
-## Architecture and Execution Flow
+---
+
+## 1. Dynamic YAML Routing and Envelope Construction
+
+The proxy is driven by `config.yaml`. By utilizing a Route matching engine, the proxy can apply different security postures and dynamic field extraction rules depending on the RPC being invoked.
+
+```yaml
+routes:
+  # Route 1: Legacy pass-through
+  # The proxy will not attempt to decode the message; it streams raw bytes directly.
+  - match: "/echo.EchoService/*"
+    mode: "pass-thru"
+
+  # Route 2: Secure Envelope Processing
+  # The proxy will use dynamicpb to decode the payload, using the field names below 
+  # to dynamically extract the payload, perform CMS verification, and inject its own signature.
+  - match: "/echo.SecureService/*"
+    mode: "inspect-verify-sign"
+    envelope:
+      payload_field: "payload"
+      type_url_field: "type_url"
+      client_sig_field: "client_signature"
+      proxy_sig_field: "proxy_signature"
+      metadata_field: "metadata"
+```
+
+Because the Envelope schema mappings are defined as arbitrary YAML strings (e.g. `payload_field: "payload"`), the proxy is entirely unopinionated about the exact `.proto` structure of your Envelope. If your backend team defines an Envelope where the signature field is called `cms_sig`, you simply update `config.yaml` to point to `client_sig_field: "cms_sig"` and the proxy intelligently adapts at runtime.
+
+---
+
+## 2. Architecture and Execution Flow
 
 The core architecture relies on a "transparent" gRPC handler combined with a custom byte-level codec. 
 
-### 1. The Custom Codec (`bytesCodec`)
-To prevent the gRPC server from attempting (and failing) to unmarshal incoming bytes into strongly-typed Go structs, the proxy defines a custom `encoding.Codec` named `bytesCodec` (`proxy/main.go:L29`). 
+### A. The Custom Codec (`bytesCodec`)
+To prevent the gRPC server from attempting (and failing) to unmarshal incoming bytes into strongly-typed Go structs, the proxy defines a custom `encoding.Codec` named `bytesCodec` (`proxy/main.go:L55`). 
 
-```go
-func (bytesCodec) Unmarshal(data []byte, v interface{}) error {
-	b, ok := v.(*[]byte)
-    // ...
-	*b = append([]byte(nil), data...)
-	return nil
-}
-```
-This codec instructs the gRPC server to treat all incoming payloads as raw `[]byte` slices, preserving the serialized protobuf data. The codec is forced on the server via `grpc.ForceServerCodec(bytesCodec{})` (`proxy/main.go:L68`).
+This codec instructs the gRPC server to treat all incoming payloads as raw `[]byte` slices, preserving the serialized protobuf data. The codec is forced on the server via `grpc.ForceServerCodec(bytesCodec{})`.
 
-### 2. The Unknown Service Handler
-Because the proxy does not register any specific service surfaces (like `RegisterEchoServiceServer`), all incoming connections fall back to the `grpc.UnknownServiceHandler()`. We supply a custom function, `transparentHandler` (`proxy/main.go:L84`), to act as the traffic director.
+### B. Stream Termination and Transparent Routing
+Because the proxy does not register any specific service surfaces (like `RegisterEchoServiceServer`), all incoming connections fall back to the `grpc.UnknownServiceHandler(transparentHandler)`. 
 
-### 3. Stream Termination and Forwarding
-When a client connects, the `transparentHandler` behaves as follows:
-1. **Intercept Method:** It extracts the requested RPC method name (e.g., `/echo.EchoService/BidirectionalStreamingEcho`) from the stream context.
-2. **Context Propagation:** It copies incoming metadata (headers) to a new outgoing context (`proxy/main.go:L91`).
-3. **Backend Dialing:** It dials the configured backend server using the `bytesCodec` so that outbound messages remain as raw bytes.
-4. **Asynchronous Pumping:** For bidirectional streams, it spins up two goroutines:
-   - **Client-to-Server (`c2s`):** Receives raw bytes from the client stream, conditionally inspects them, and sends them to the backend stream (`proxy/main.go:L130`).
-   - **Server-to-Client (`s2c`):** Receives raw bytes from the backend stream, conditionally inspects them, and sends them to the client stream (`proxy/main.go:L114`).
+When a client connects to a bidirectional stream, `transparentHandler` behaves as follows:
+1. **Intercept Method:** Extracts the requested RPC method name (e.g., `/echo.SecureService/SecureBidiEcho`).
+2. **Match Route Config:** Checks the `config.yaml` to determine the security mode (e.g. `inspect-verify-sign`).
+3. **Backend Dialing:** It dials the target backend using the same `bytesCodec` so that outbound messages remain as raw bytes payload if untouched.
+4. **Asynchronous Pumping:** For bidirectional streams, it spins up two goroutines to pump bytes from Client -> Server and Server -> Client simultaneously (`proxy/main.go:L163`).
 
-### 4. Dynamic Message Inspection
-Inside the pumping goroutines, the `inspectMsg` function (`proxy/main.go:L166`) is called. This function performs the deep inspection:
+### C. The Envelope Processor (`processMsg`)
+Inside the pumping loop, messages configured for inspection are routed to `processMsg`.
 
-1. **Schema Retrieval:** It looks up the pre-loaded `MethodDescriptor` based on the intercepted RPC path.
-2. **Dynamic Unmarshaling:** Based on whether the message is a request or response, it gets the specific `MessageDescriptor` (e.g., `InputType` or `OutputType`), constructs an empty dynamic message using `dynamic.NewMessage(msgDesc)`, and unmarshals the raw `[]byte` payload into it.
-3. **Data Extraction:** Once decoded into a `dynamicpb.Message`, the object can be converted to JSON (`dynMsg.MarshalJSONIndent()`), logged, or algorithmically inspected.
+1. **Schema Retrieval:** It looks up the pre-loaded `MethodDescriptor` based on the intercepted RPC path to find exactly what `.proto` schema the client submitted.
+2. **Dynamic Unmarshaling:** Constructs an empty dynamic message using `dynamic.NewMessage(msgDesc)` and unmarshals the raw `[]byte` wire payload into it.
+3. **Field Extraction:** Using the dynamic schema, the proxy dynamically targets the fields requested by YAML (`route.Envelope.PayloadField`, `route.Envelope.ClientSigField`). 
+4. **CMS Verification:** The proxy verifies the `client_signature` bytes against the immutable `payload` bytes using its configured Trust Store. By keeping the signature separated from the payload inside the Envelope, re-serialization vulnerabilities that invalidate signatures are mitigated.
+5. **Inner Inspection:** The proxy reads the `type_url` field, dynamically looks up the inner message schema, and reconstructs the inner payload for inspection or logging.
+6. **CMS Signing:** The proxy signs the `payload` using its private key and *injects* the bytes directly into the `dynamicpb.Message` field requested by `route.Envelope.ProxySigField`.
+7. **Forwarding:** The updated `dynamicpb.Message` is marshaled back to `[]byte` and sent across the wire.
 
-## Defining New RPCs Without Recompilation
+---
 
-The defining feature of this proxy is its ability to understand new data types without recompiling the Go binary. The POC implements two distinct methods for schema discovery:
+## 3. Defining New RPCs Without Recompilation
+
+The defining feature of this proxy is its ability to learn about new data types instantly. The POC implements two distinct methods:
 
 ### Method 1: FileDescriptorSets (`.pb` files)
-This is the recommended "push" model. The proxy is provided a pre-compiled binary representation of the `.proto` files.
+This is the "push" model. The proxy is provided a pre-compiled binary representation of the `.proto` files.
 
-**How to introduce a new RPC:**
-1. A developer adds a new RPC or Message to a `.proto` file (e.g., `api/users/users.proto`).
-2. The developer or a CI/CD pipeline compiles the descriptors to a `.pb` file using `protoc`:
-   ```bash
-   protoc --descriptor_set_out=api/users/users.pb --include_imports api/users/users.proto
-   ```
-3. The `.pb` file is placed in a directory accessible by the proxy.
-4. The proxy parses the `.pb` file at startup (or via a hot-reload watcher mechanism) using `desc.CreateFileDescriptorsFromSet` (`proxy/main.go:L202`).
-5. From that point forward, if an RPC matching the new definition passes through, the proxy has the schema required to decode the payload. **No Go compilation of the proxy occurs.**
+1. A developer adds a new RPC or Message to a `.proto` file.
+2. The developer compiles the descriptors to a `.pb` file using `protoc --descriptor_set_out=api/echo.pb`.
+3. The proxy parses the `.pb` file at startup (or via a hot-reload watcher mechanism) using `desc.CreateFileDescriptorsFromSet`. **No Go compilation of the proxy occurs.**
 
 ### Method 2: gRPC Server Reflection
-This is an alternative "pull" model. If the target backend server enables the gRPC Server Reflection API (as done in `backend/main.go:L48`), it self-reports its schema.
+This is the "pull" model. 
 
-**How to introduce a new RPC:**
 1. A developer adds a new RPC to a `.proto` file, builds the backend server, and deploys it.
-2. When the proxy starts (or when triggered to refresh), it opens a connection to the backend and queries the reflection API using the `grpcreflect` client (`proxy/main.go:L227`).
-3. The backend responds with its full schema (Services, Methods, and Types). The proxy caches these descriptors.
-4. When traffic arrives, the proxy uses the cached reflection descriptors to unmarshal the raw bytes exactly as it would using a `.pb` file. **The proxy binary remains wholly unchanged.**
+2. The proxy utilizes the `grpcreflect` client to dial the backend server at startup and ask the backend for its schema directly.
+3. The backends responds with all definitions. The proxy dynamically parses incoming matching packets exactly as if it was using a `.pb` file. **The proxy binary remains wholly unchanged.**
+
+---
+
+## 4. Hybrid Go/Rust CGO Architecture (Performance Offloading)
+
+While Go's `dynamicpb` handles dynamic Envelopes well, cryptographic math (such as 2048-bit RSA PKCS#1v15 signing and verification over SHA-256) is highly CPU-intensive. To optimize this, the proxy supports offloading these heavy operations to a compiled **Rust C-ABI Dynamic Library (`cdylib`)** via **CGO (Go's Foreign Function Interface)**.
+
+By keeping the proxy's core networking, HTTP/2 streams, and dynamic routing in Go, and dropping down into high-performance Rust (`rsa` + `sha2` crates) purely for the signature logic using `C.CBytes` and `C.GoBytes`, the system achieves the "best of both worlds".
+
+### Benchmark Results (10,000 Concurrent Requests)
+
+The proxy includes an integrated synthetic benchmark tool (`make bench-all`) to measure the performance overhead of both dynamic protobuf parsing and CGO cryptographic offloading.
+
+| Mode | Engine | Total Time | Average Latency | Overhead vs Baseline |
+| :--- | :--- | :--- | :--- | :--- |
+| **Pass-Thru** | No Decoding | 3.31 sec | **~331 µs / req** | *Baseline* |
+| **Inspect Outer** | Go `dynamicpb` (No Crypto) | 3.53 sec | **~353 µs / req** | **+22 µs / req** |
+| **Secure Envelope** | **Pure Go Crypto** | 21.50 sec | **~2.15 ms / req** | **+1.82 ms / req** |
+| **Secure Envelope** | **Rust CGO FFI Crypto** | 19.67 sec | **~1.96 ms / req** | **+1.63 ms / req** |
+
+### Benchmark Takeaways
+
+1. **Dynamic Protobuf Parsing is Fast:** The overhead of catching a raw bitstream, converting it to a dynamic message (`dynamicpb`), mapping Envelope fields via YAML, inspecting the inner payload, and serializing it back to bytes adds only **~22 microseconds** of latency per request. 
+2. **Rust is ~10% Faster at Crypto than Go:** Offloading the two RSA-2048 operations (verify and sign) to the compiled Rust library shaved ~200 microseconds off each request compared to Go's standard `crypto/rsa` library, representing nearly a 10% total latency reduction across the entire execution flow.
+3. **CGO Overhead is Minimal:** The cost of passing C-pointers (`*const u8`) back and forth across the Go/Rust C ABI boundary is insignificant compared to the heavy mathematical work being performed.

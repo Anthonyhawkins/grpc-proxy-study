@@ -1,0 +1,37 @@
+server:
+  listen_address: ":8080"
+
+backend:
+  address: "localhost:9090"
+
+schema:
+  method: "pb"
+  pb_path: "api/echo/echo.pb"
+
+routes:
+  # Legacy pass-through
+  - match: "/echo.EchoService/*"
+    mode: "pass-thru"
+
+  # Inspect Outer Envelope (Decode, Extract Fields, but No Crypto)
+  - match: "/echo.SecureService/InspectOuter"
+    mode: "inspect-outer"
+    envelope:
+      payload_field: "payload"
+      type_url_field: "type_url"
+      metadata_field: "metadata"
+
+  # Secure Envelope with inspecting, verifying, and signing
+  - match: "/echo.SecureService/*"
+    mode: "inspect-verify-sign"
+    envelope:
+      payload_field: "payload"
+      type_url_field: "type_url"
+      client_sig_field: "client_signature"
+      proxy_sig_field: "proxy_signature"
+      metadata_field: "metadata"
+
+cms:
+  client_trust_store: "certs/ca.crt" # Placeholder
+  proxy_private_key: "certs/proxy.key" # Placeholder
+  proxy_certificate: "certs/proxy.crt" # Placeholder

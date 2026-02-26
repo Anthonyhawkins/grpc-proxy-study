@@ -152,3 +152,180 @@ var EchoService_ServiceDesc = grpc.ServiceDesc{
 	},
 	Metadata: "api/echo/echo.proto",
 }
+
+const (
+	SecureService_SecureEcho_FullMethodName     = "/echo.SecureService/SecureEcho"
+	SecureService_SecureBidiEcho_FullMethodName = "/echo.SecureService/SecureBidiEcho"
+	SecureService_InspectOuter_FullMethodName   = "/echo.SecureService/InspectOuter"
+)
+
+// SecureServiceClient is the client API for SecureService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// SecureService uses the SecureEnvelope
+type SecureServiceClient interface {
+	SecureEcho(ctx context.Context, in *SecureEnvelope, opts ...grpc.CallOption) (*SecureEnvelope, error)
+	SecureBidiEcho(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[SecureEnvelope, SecureEnvelope], error)
+	InspectOuter(ctx context.Context, in *SecureEnvelope, opts ...grpc.CallOption) (*SecureEnvelope, error)
+}
+
+type secureServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewSecureServiceClient(cc grpc.ClientConnInterface) SecureServiceClient {
+	return &secureServiceClient{cc}
+}
+
+func (c *secureServiceClient) SecureEcho(ctx context.Context, in *SecureEnvelope, opts ...grpc.CallOption) (*SecureEnvelope, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SecureEnvelope)
+	err := c.cc.Invoke(ctx, SecureService_SecureEcho_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *secureServiceClient) SecureBidiEcho(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[SecureEnvelope, SecureEnvelope], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &SecureService_ServiceDesc.Streams[0], SecureService_SecureBidiEcho_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[SecureEnvelope, SecureEnvelope]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type SecureService_SecureBidiEchoClient = grpc.BidiStreamingClient[SecureEnvelope, SecureEnvelope]
+
+func (c *secureServiceClient) InspectOuter(ctx context.Context, in *SecureEnvelope, opts ...grpc.CallOption) (*SecureEnvelope, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SecureEnvelope)
+	err := c.cc.Invoke(ctx, SecureService_InspectOuter_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// SecureServiceServer is the server API for SecureService service.
+// All implementations must embed UnimplementedSecureServiceServer
+// for forward compatibility.
+//
+// SecureService uses the SecureEnvelope
+type SecureServiceServer interface {
+	SecureEcho(context.Context, *SecureEnvelope) (*SecureEnvelope, error)
+	SecureBidiEcho(grpc.BidiStreamingServer[SecureEnvelope, SecureEnvelope]) error
+	InspectOuter(context.Context, *SecureEnvelope) (*SecureEnvelope, error)
+	mustEmbedUnimplementedSecureServiceServer()
+}
+
+// UnimplementedSecureServiceServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedSecureServiceServer struct{}
+
+func (UnimplementedSecureServiceServer) SecureEcho(context.Context, *SecureEnvelope) (*SecureEnvelope, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SecureEcho not implemented")
+}
+func (UnimplementedSecureServiceServer) SecureBidiEcho(grpc.BidiStreamingServer[SecureEnvelope, SecureEnvelope]) error {
+	return status.Errorf(codes.Unimplemented, "method SecureBidiEcho not implemented")
+}
+func (UnimplementedSecureServiceServer) InspectOuter(context.Context, *SecureEnvelope) (*SecureEnvelope, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method InspectOuter not implemented")
+}
+func (UnimplementedSecureServiceServer) mustEmbedUnimplementedSecureServiceServer() {}
+func (UnimplementedSecureServiceServer) testEmbeddedByValue()                       {}
+
+// UnsafeSecureServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to SecureServiceServer will
+// result in compilation errors.
+type UnsafeSecureServiceServer interface {
+	mustEmbedUnimplementedSecureServiceServer()
+}
+
+func RegisterSecureServiceServer(s grpc.ServiceRegistrar, srv SecureServiceServer) {
+	// If the following call pancis, it indicates UnimplementedSecureServiceServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&SecureService_ServiceDesc, srv)
+}
+
+func _SecureService_SecureEcho_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SecureEnvelope)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SecureServiceServer).SecureEcho(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SecureService_SecureEcho_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SecureServiceServer).SecureEcho(ctx, req.(*SecureEnvelope))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SecureService_SecureBidiEcho_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(SecureServiceServer).SecureBidiEcho(&grpc.GenericServerStream[SecureEnvelope, SecureEnvelope]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type SecureService_SecureBidiEchoServer = grpc.BidiStreamingServer[SecureEnvelope, SecureEnvelope]
+
+func _SecureService_InspectOuter_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SecureEnvelope)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SecureServiceServer).InspectOuter(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SecureService_InspectOuter_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SecureServiceServer).InspectOuter(ctx, req.(*SecureEnvelope))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// SecureService_ServiceDesc is the grpc.ServiceDesc for SecureService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var SecureService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "echo.SecureService",
+	HandlerType: (*SecureServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "SecureEcho",
+			Handler:    _SecureService_SecureEcho_Handler,
+		},
+		{
+			MethodName: "InspectOuter",
+			Handler:    _SecureService_InspectOuter_Handler,
+		},
+	},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "SecureBidiEcho",
+			Handler:       _SecureService_SecureBidiEcho_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+	},
+	Metadata: "api/echo/echo.proto",
+}

@@ -1,0 +1,14 @@
+/Users/anthony/workspace/grpc-proxy/rust-crypto/target/release/deps/serde-f62b996e828f0ca3.d: /Users/anthony/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /Users/anthony/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /Users/anthony/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /Users/anthony/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /Users/anthony/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /Users/anthony/workspace/grpc-proxy/rust-crypto/target/release/build/serde-42b919e2ceb26580/out/private.rs
+
+/Users/anthony/workspace/grpc-proxy/rust-crypto/target/release/deps/libserde-f62b996e828f0ca3.rlib: /Users/anthony/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /Users/anthony/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /Users/anthony/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /Users/anthony/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /Users/anthony/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /Users/anthony/workspace/grpc-proxy/rust-crypto/target/release/build/serde-42b919e2ceb26580/out/private.rs
+
+/Users/anthony/workspace/grpc-proxy/rust-crypto/target/release/deps/libserde-f62b996e828f0ca3.rmeta: /Users/anthony/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /Users/anthony/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /Users/anthony/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /Users/anthony/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /Users/anthony/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /Users/anthony/workspace/grpc-proxy/rust-crypto/target/release/build/serde-42b919e2ceb26580/out/private.rs
+
+/Users/anthony/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs:
+/Users/anthony/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs:
+/Users/anthony/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs:
+/Users/anthony/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs:
+/Users/anthony/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs:
+/Users/anthony/workspace/grpc-proxy/rust-crypto/target/release/build/serde-42b919e2ceb26580/out/private.rs:
+
+# env-dep:OUT_DIR=/Users/anthony/workspace/grpc-proxy/rust-crypto/target/release/build/serde-42b919e2ceb26580/out
